@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0f1419">
+<title>Val Shop</title>
+<style>
+  :root {
+    --bg: #0f1419; --card: #1a222c; --line: #2a3441;
+    --text: #ece8e1; --muted: #8b97a5; --accent: #ff4655;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 17px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    padding: calc(env(safe-area-inset-top) + 24px) 16px calc(env(safe-area-inset-bottom) + 32px);
+  }
+  main { max-width: 480px; margin: 0 auto; }
+  h1 { font-size: 30px; margin: 0 0 4px; letter-spacing: -0.02em; }
+  .sub { color: var(--muted); margin: 0 0 20px; font-size: 15px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .row { display: flex; justify-content: space-between; gap: 12px; padding: 14px 16px; border-top: 1px solid var(--line); }
+  .row:first-child { border-top: 0; }
+  .price { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .step { padding: 16px; border-top: 1px solid var(--line); }
+  .step:first-child { border-top: 0; }
+  .step p { margin: 0 0 12px; }
+  .num { color: var(--accent); font-weight: 700; margin-right: 6px; }
+  button, .btn {
+    display: block; width: 100%; padding: 13px 16px; border: 0; border-radius: 10px;
+    background: var(--accent); color: #fff; font: inherit; font-weight: 600;
+    text-align: center; text-decoration: none; cursor: pointer;
+  }
+  button.quiet { background: transparent; color: var(--muted); font-weight: 500; margin-top: 16px; }
+  button:disabled { opacity: 0.5; }
+  input {
+    width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; font-size: 16px;
+  }
+  .msg { margin: 16px 2px 0; font-size: 15px; color: var(--muted); }
+  .msg.error { color: var(--accent); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Today's Shop</h1>
+  <p class="sub" id="sub"></p>
+
+  <section id="shop" hidden>
+    <div class="card" id="items"></div>
+    <button class="quiet" id="reload">Load a different account or refresh</button>
+  </section>
+
+  <section id="login" hidden>
+    <div class="card">
+      <div class="step">
+        <p><span class="num">1</span>Sign in on Riot's page. It ends on a "page not found" screen — that's expected. Copy that page's full address.</p>
+        <a class="btn" id="open" target="_blank" rel="noopener noreferrer">Open Riot sign-in</a>
+      </div>
+      <div class="step">
+        <p><span class="num">2</span>Come back here and paste the address.</p>
+        <input id="link" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://playvalorant.com/…#access_token=…">
+        <button id="go">Paste and load shop</button>
+      </div>
+    </div>
+  </section>
+
+  <p class="msg" id="msg" hidden></p>
+</main>
+
+<script>
+// Everything runs in this browser. The pasted token goes only to Riot's own
+// servers and is never stored; only the resulting shop list is cached locally.
+const AUTH_URL = "https://auth.riotgames.com/authorize?redirect_uri=https%3A%2F%2Fplayvalorant.com%2Fopt_in&client_id=play-valorant-web-prod&response_type=token%20id_token&nonce=1&scope=account%20openid";
+const VP = "85ad13f7-3d1b-5128-9eb2-7cd8ee0b5741";
+const PLATFORM = "ew0KCSJwbGF0Zm9ybVR5cGUiOiAiUEMiLA0KCSJwbGF0Zm9ybU9TIjogIldpbmRvd3MiLA0KCSJwbGF0Zm9ybU9TVmVyc2lvbiI6ICIxMC4wLjE5MDQyLjEuMjU2LjY0Yml0IiwNCgkicGxhdGZvcm1DaGlwc2V0IjogIlVua25vd24iDQp9";
+const CACHE_KEY = "valshop.cache";
+
+const $ = (id) => document.getElementById(id);
+$("open").href = AUTH_URL;
+
+function showMessage(text, isError) {
+  $("msg").textContent = text || "";
+  $("msg").hidden = !text;
+  $("msg").classList.toggle("error", !!isError);
+}
+
+function readCache() {
+  try {
+    const shop = JSON.parse(localStorage.getItem(CACHE_KEY));
+    return shop && shop.expiresAt > Date.now() ? shop : null;
+  } catch { return null; }
+}
+
+function showLogin() {
+  $("shop").hidden = true;
+  $("login").hidden = false;
+  $("sub").textContent = "Sign in to load today's skins.";
+}
+
+function showShop(shop) {
+  $("login").hidden = true;
+  $("shop").hidden = false;
+  const list = $("items");
+  list.replaceChildren();
+  for (const item of shop.items) {
+    const row = document.createElement("div");
+    row.className = "row";
+    const name = document.createElement("span");
+    name.textContent = item.name;
+    const price = document.createElement("span");
+    price.className = "price";
+    price.textContent = item.price != null ? item.price.toLocaleString() + " VP" : "";
+    row.append(name, price);
+    list.append(row);
+  }
+  const minutes = Math.max(0, Math.round((shop.expiresAt - Date.now()) / 60000));
+  const at = new Date(shop.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  $("sub").textContent = `Resets in ${Math.floor(minutes / 60)}h ${minutes % 60}m (${at})`;
+}
+
+async function call(what, url, options) {
+  let response;
+  try {
+    response = await fetch(url, options);
+  } catch {
+    // Riot's error replies can't be read by a web page, so a rejected link also lands here.
+    throw new Error(`${what}: no usable reply from the server. The sign-in link may have expired (it lasts one hour) — open Riot sign-in again and copy a fresh address. (${location.host})`);
+  }
+  if (!response.ok) {
+    const expired = response.status === 400 || response.status === 401;
+    throw new Error(expired
+      ? `${what}: Riot rejected the sign-in link (HTTP ${response.status}). It lasts one hour — open Riot sign-in again and copy a fresh address.`
+      : `${what} request failed (HTTP ${response.status}).`);
+  }
+  return response.json();
+}
+
+function playerId(accessToken) {
+  const payload = accessToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+  return JSON.parse(atob(payload.padEnd(Math.ceil(payload.length / 4) * 4, "="))).sub;
+}
+
+async function fetchShop(accessToken, idToken) {
+  let puuid;
+  try { puuid = playerId(accessToken); } catch { throw new Error("That address doesn't contain a valid Riot token."); }
+  const auth = { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" };
+
+  const [entitlements, geo, version] = await Promise.all([
+    call("Entitlements", "https://entitlements.auth.riotgames.com/api/token/v1", { method: "POST", headers: auth, body: "{}" }),
+    call("Region", "https://riot-geo.pas.si.riotgames.com/pas/v1/product/valorant", { method: "PUT", headers: auth, body: JSON.stringify({ id_token: idToken }) }),
+    call("Game version", "https://valorant-api.com/v1/version"),
+  ]);
+  const region = geo.affinities.live;
+  const shard = region === "latam" || region === "br" ? "na" : region;
+
+  const store = await call("Shop", `https://pd.${shard}.a.pvp.net/store/v3/storefront/${puuid}`, {
+    method: "POST",
+    body: "{}",
+    headers: {
+      ...auth,
+      "X-Riot-Entitlements-JWT": entitlements.entitlements_token,
+      "X-Riot-ClientPlatform": PLATFORM,
+      "X-Riot-ClientVersion": version.data.riotClientVersion,
+    },
+  });
+
+  const panel = store.SkinsPanelLayout;
+  const prices = {};
+  for (const offer of panel.SingleItemStoreOffers || []) {
+    prices[offer.OfferID.toLowerCase()] = offer.Cost[VP] ?? Object.values(offer.Cost)[0];
+  }
+  const items = await Promise.all(panel.SingleItemOffers.map(async (uuid) => {
+    let name = `Unknown skin (${uuid})`;
+    try { name = (await call("Skin name", `https://valorant-api.com/v1/weapons/skinlevels/${uuid}`)).data.displayName; } catch {}
+    return { name, price: prices[uuid.toLowerCase()] ?? null };
+  }));
+  return { items, expiresAt: Date.now() + panel.SingleItemOffersRemainingDurationInSeconds * 1000 };
+}
+
+async function load() {
+  let text = $("link").value.trim();
+  if (!text && navigator.clipboard && navigator.clipboard.readText) {
+    try { text = (await navigator.clipboard.readText()).trim(); } catch {}
+  }
+  const access = /access_token=([^&\s#]+)/.exec(text);
+  const id = /id_token=([^&\s#]+)/.exec(text);
+  if (!access || !id) {
+    showMessage("That doesn't look like the Riot address. Paste the full address of the page you land on after signing in — it contains \"access_token=\".", true);
+    return;
+  }
+  $("go").disabled = true;
+  showMessage("Loading shop…");
+  try {
+    const shop = await fetchShop(decodeURIComponent(access[1]), decodeURIComponent(id[1]));
+    // Saving is optional: storage is unavailable in private tabs and file previews.
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(shop)); } catch {}
+    $("link").value = "";
+    showMessage("");
+    showShop(shop);
+  } catch (error) {
+    showMessage(error.message, true);
+  } finally {
+    $("go").disabled = false;
+  }
+}
+
+$("go").addEventListener("click", load);
+$("reload").addEventListener("click", () => { try { localStorage.removeItem(CACHE_KEY); } catch {} showMessage(""); showLogin(); });
+
+const cached = readCache();
+if (cached) showShop(cached); else showLogin();
+</script>
+</body>
+</html>
