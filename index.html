@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
+<!-- Lockdown: no scripts from any other site may load, and the page may only
+     talk to Riot, the skin-name service and the visit-counter image. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src https://bolemunze.goatcounter.com; connect-src https://entitlements.auth.riotgames.com https://riot-geo.pas.si.riotgames.com https://*.a.pvp.net https://valorant-api.com; base-uri 'none'; form-action 'none'">
 <meta name="theme-color" content="#0f1419">
 <title>Val Shop</title>
 <style>
